@@ -202,7 +202,7 @@ def build_map(edges, sel=None):
         rad = airshed_radius(aid)
         col = AC[aid]
         lats, lons = circle_pts(clat, clon, rad)
-        fig.add_trace(go.Scattermapbox(
+        fig.add_trace(go.Scattermap(
             lat=lats, lon=lons, mode="lines",
             fill="toself",
             fillcolor=rgba(col, 0.08),
@@ -219,7 +219,7 @@ def build_map(edges, sel=None):
         hi  = bool(sel and (e["src"]==sel or e["tgt"]==sel))
         dim = bool(sel and not hi)
         lats, lons = bezier_pts(s["lat"], s["lon"], t["lat"], t["lon"])
-        fig.add_trace(go.Scattermapbox(
+        fig.add_trace(go.Scattermap(
             lat=lats, lon=lons, mode="lines",
             line=dict(color=src_col, width=3.2 if hi else 1.5),
             opacity=0.92 if hi else (0.05 if dim else 0.32),
@@ -232,7 +232,7 @@ def build_map(edges, sel=None):
         ))
         # Direction dot — separate trace, scalar opacity only
         alat, alon = bezier_pt(s["lat"], s["lon"], t["lat"], t["lon"], 0.82)
-        fig.add_trace(go.Scattermapbox(
+        fig.add_trace(go.Scattermap(
             lat=[alat], lon=[alon], mode="markers",
             marker=dict(size=7 if hi else 5, color=src_col),
             opacity=0.88 if not dim else 0.06,
@@ -268,7 +268,7 @@ def build_map(edges, sel=None):
                 sizes.append(20 if is_sel else 10 + min(deg, 7))
                 texts.append(c["id"])
 
-            fig.add_trace(go.Scattermapbox(
+            fig.add_trace(go.Scattermap(
                 lat=lats, lon=lons,
                 mode="markers+text",
                 marker=dict(
@@ -290,7 +290,7 @@ def build_map(edges, sel=None):
     if sel and sel in CM:
         sc_city = CM[sel]
         col = AC[sc_city["aid"]]
-        fig.add_trace(go.Scattermapbox(
+        fig.add_trace(go.Scattermap(
             lat=[sc_city["lat"]], lon=[sc_city["lon"]], mode="markers",
             marker=dict(size=30, color=col),
             opacity=0.18,
@@ -298,7 +298,7 @@ def build_map(edges, sel=None):
         ))
 
     fig.update_layout(
-        mapbox=dict(style="carto-positron", center=dict(lat=15.8, lon=121.5), zoom=6.2),
+        map=dict(style="carto-positron", center=dict(lat=15.9, lon=121.2), zoom=6.4),
         margin=dict(l=0, r=0, t=0, b=0), height=640,
         paper_bgcolor="white",
         legend=dict(
@@ -339,7 +339,7 @@ def build_pm_chart(city_id, month):
         x=[MN[m] for m in months], y=pm,
         marker_color=bar_colors,
         marker_line=dict(
-            color=["white" if m==month else "transparent" for m in months],
+            color=["white" if m==month else "rgba(0,0,0,0)" for m in months],
             width=[2 if m==month else 0 for m in months],
         ),
         hovertemplate="<b>%{x}</b><br>PM2.5: %{y:.1f} µg/m³<extra></extra>",
@@ -457,7 +457,7 @@ st.markdown(
 col_map, col_panel = st.columns([3,1], gap="medium")
 
 with col_map:
-    st.plotly_chart(build_map(edges, sel_city), use_container_width=True,
+    st.plotly_chart(build_map(edges, sel_city), width='stretch',
         config={"displayModeBar":True,
                 "modeBarButtonsToRemove":["select2d","lasso2d","autoScale2d"],
                 "displaylogo":False,"scrollZoom":True})
@@ -541,7 +541,7 @@ if sel_city:
     st.markdown(
         f'<div class="sec-label">Monthly PM&#8322;.&#8325; Seasonal Profile — {sel_city}</div>',
         unsafe_allow_html=True)
-    st.plotly_chart(build_pm_chart(sel_city, month), use_container_width=True,
+    st.plotly_chart(build_pm_chart(sel_city, month), width='stretch',
                     config={"displayModeBar":False})
 else:
     st.markdown('<div class="sec-label">Season Summary — Backbone Edge Activation</div>',
