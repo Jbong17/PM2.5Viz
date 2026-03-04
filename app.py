@@ -618,9 +618,7 @@ with st.sidebar:
     )
 
     st.markdown('<div class="sec-label">Month</div>', unsafe_allow_html=True)
-    month = st.slider("Month", 1, 12, 11,
-                      format_func=lambda m: MONTH_NAMES[m],
-                      label_visibility="collapsed")
+    month = st.slider("Month", 1, 12, 11, label_visibility="collapsed")
 
     ms_label = MONTH_SEASON[month]
     st.markdown(
