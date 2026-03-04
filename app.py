@@ -243,25 +243,15 @@ with col_viz:
     viz_html = Path(__file__).parent / "viz_light.html"
     html_src = viz_html.read_text(encoding="utf-8")
 
-    # Inject init state right before render()/startAnim() at the bottom
-    # Robust injection: try exact comment first, then fallback to just before render()
-    init_marker = "// ── INIT ──────────────────────────────────────────────────────────────────────\nrender();\nstartAnim();"
-    init_marker2 = "render();\nstartAnim();"
-    init_replacement = f"// ── INIT (state injected by Streamlit) ──\n{init_js}\nrender();\nstartAnim();"
+    # Inject init state — Leaflet version: insert state vars before map.whenReady
+    init_marker = "// ── INIT ──────────────────────────────────────────────────────────────────────\nmap.whenReady(function(){"
     if init_marker in html_src:
-        html_src = html_src.replace(init_marker, init_replacement)
-    elif init_marker2 in html_src:
-        html_src = html_src.replace(init_marker2, init_replacement, 1)
+        html_src = html_src.replace(
+            init_marker,
+            f"// ── INIT ──────────────────────────────────────────────────────────────────────\n{init_js}\nmap.whenReady(function(){{"
+        )
 
-    # Inject postMessage on city click so Streamlit can receive it
-    html_src = html_src.replace(
-        "SEL=(SEL===city.id?null:city.id);\n    render();",
-        "SEL=(SEL===city.id?null:city.id);\n    window.parent.postMessage({type:'cityClick',city:SEL},'*');\n    render();"
-    )
-    html_src = html_src.replace(
-        "svg.addEventListener(\"click\",function(){SEL=null;render();});",
-        "svg.addEventListener(\"click\",function(){SEL=null;window.parent.postMessage({type:'cityClick',city:null},'*');render();});"
-    )
+    # postMessage on city click is already built into viz_light.html Leaflet version
 
     components.html(html_src, height=740, scrolling=False)
 
