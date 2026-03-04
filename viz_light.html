@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>PM2.5 Causal Transport Network · Luzon</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#f0f7ff;font-family:'Inter',sans-serif;color:#1e293b;overflow-x:hidden;}
+button{font-family:'Inter',sans-serif;cursor:pointer;}
+button:focus{outline:none;}
+::-webkit-scrollbar{width:5px;}
+::-webkit-scrollbar-track{background:#f1f5f9;}
+::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px;}
+#app{display:flex;flex-direction:column;min-height:100vh;}
+#header{padding:10px 16px;background:#fff;border-bottom:1px solid #e2e8f0;
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;
+  box-shadow:0 1px 3px rgba(0,0,0,0.05);}
+#monthbar{padding:5px 16px;background:#f8fafc;border-bottom:1px solid #f1f5f9;
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+#body{display:flex;flex:1;}
+#mapwrap{flex:1;position:relative;}
+#panel{display:none;}
+.sbtn{padding:3px 10px;font-size:9px;border-radius:4px;border:1px solid #e2e8f0;
+  background:#f8fafc;color:#64748b;transition:all 0.15s;font-weight:500;letter-spacing:0.03em;}
+.mbtn{width:30px;height:21px;font-size:8px;border-radius:3px;border:1px solid #e2e8f0;
+  background:#f8fafc;color:#94a3b8;transition:all 0.12s;font-weight:500;}
+.erow{display:flex;align-items:center;gap:5px;padding:5px 8px;margin-bottom:3px;
+  background:#f8fafc;border:1px solid #f1f5f9;border-radius:5px;cursor:pointer;}
+.erow:hover{background:#eff6ff;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <div id="header">
+    <div>
+      <div style="font-size:12px;letter-spacing:0.15em;color:#1e40af;font-weight:700;">
+        PM&#8322;.&#8325; CAUSAL TRANSPORT NETWORK &middot; LUZON, PHILIPPINES
+      </div>
+      <div style="font-size:9px;color:#94a3b8;margin-top:2px;">
+        Proxy-controlled Granger causality &middot; 40 cities &middot; 344-edge backbone &middot; 7 functional airsheds
+      </div>
+    </div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;" id="sbtns"></div>
+  </div>
+
+  <!-- MONTH BAR -->
+  <div id="monthbar">
+    <span style="font-size:8px;color:#475569;letter-spacing:0.1em;">MONTH</span>
+    <div id="mbtns" style="display:flex;gap:2px;"></div>
+    <span id="mlabel" style="font-size:10px;font-weight:bold;"></span>
+    <span id="ecount" style="font-size:8px;color:#94a3b8;margin-left:auto;"></span>
+  </div>
+
+  <!-- BODY -->
+  <div id="body">
+    <div id="mapwrap">
+      <svg id="mapsvg" width="700" height="680" style="display:block;background:#b8d9ee;"></svg>
+      <div id="legend" style="position:absolute;bottom:10px;left:10px;
+        background:rgba(255,255,255,0.96);border:1px solid #e2e8f0;border-radius:8px;
+        box-shadow:0 2px 10px rgba(0,0,0,0.1);padding:9px 12px;line-height:1.5;max-width:180px;"></div>
+    </div>
+    <div id="panel"></div>
+  </div>
+
+</div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────────────────────
+var AC={1:"#2563EB",2:"#9333EA",3:"#EA580C",4:"#059669",5:"#DC2626",6:"#0891B2",7:"#65A30D"};
+var AL={
+  1:"Greater Central Luzon & CALABARZON",
+  2:"NCR Core & South Metro Manila",
+  3:"Ilocos-CAR Corridor",
+  4:"Cagayan Valley & Pangasinan",
+  5:"Bicol North (isolated)",
+  6:"Bicol South (isolated)",
+  7:"MIMAROPA Gateway (isolated)"
+};
+var SC={DJF:"#0ea5e9",MAM:"#10b981",JJA:"#ef4444",SON:"#f97316"};
+var MS=[null,"DJF","DJF","MAM","MAM","MAM","JJA","JJA","JJA","SON","SON","SON","DJF"];
+var MN=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+var CITIES=[
+  {id:"Antipolo",lat:14.626,lon:121.123,aid:1},{id:"Bacoor",lat:14.458,lon:120.938,aid:2},
+  {id:"Baguio",lat:16.415,lon:120.593,aid:3},{id:"Batangas City",lat:13.756,lon:121.058,aid:1},
+  {id:"Binan",lat:14.341,lon:121.079,aid:1},{id:"Cabuyao",lat:14.275,lon:121.123,aid:1},
+  {id:"Calamba",lat:14.212,lon:121.165,aid:1},{id:"Cauayan",lat:16.935,lon:121.762,aid:4},
+  {id:"Cavite City",lat:14.483,lon:120.897,aid:2},{id:"Dagupan",lat:16.044,lon:120.333,aid:4},
+  {id:"Dasmarinas",lat:14.330,lon:120.937,aid:1},{id:"General Trias",lat:14.386,lon:120.879,aid:1},
+  {id:"Ilagan",lat:17.149,lon:121.888,aid:4},{id:"Imus",lat:14.430,lon:120.937,aid:2},
+  {id:"Laoag",lat:18.197,lon:120.594,aid:3},{id:"Las Pinas",lat:14.450,lon:120.983,aid:2},
+  {id:"Lucena",lat:13.939,lon:121.617,aid:7},{id:"Malabon",lat:14.662,lon:120.957,aid:1},
+  {id:"Manila",lat:14.599,lon:120.984,aid:2},{id:"Malolos",lat:14.845,lon:120.812,aid:1},
+  {id:"Meycauayan",lat:14.736,lon:120.961,aid:2},{id:"Navotas",lat:14.665,lon:120.943,aid:2},
+  {id:"Naga",lat:13.620,lon:123.195,aid:6},{id:"Olongapo",lat:14.829,lon:120.282,aid:1},
+  {id:"Pasig",lat:14.576,lon:121.061,aid:2},{id:"Quezon City",lat:14.676,lon:121.044,aid:1},
+  {id:"San Carlos",lat:15.926,lon:120.347,aid:1},{id:"San Fernando",lat:16.616,lon:120.316,aid:3},
+  {id:"San Jose del Monte",lat:14.814,lon:121.045,aid:1},{id:"San Juan",lat:16.671,lon:121.786,aid:3},
+  {id:"San Pablo",lat:14.069,lon:121.325,aid:1},{id:"Santa Rosa",lat:14.313,lon:121.112,aid:1},
+  {id:"Santiago",lat:16.688,lon:121.549,aid:3},{id:"Tabaco",lat:13.358,lon:123.731,aid:5},
+  {id:"Taguig",lat:14.521,lon:121.051,aid:2},{id:"Tarlac City",lat:15.487,lon:120.591,aid:1},
+  {id:"Tuguegarao",lat:17.613,lon:121.727,aid:4},{id:"Urdaneta",lat:15.976,lon:120.570,aid:1},
+  {id:"Valenzuela",lat:14.695,lon:120.983,aid:2},{id:"Vigan",lat:17.574,lon:120.387,aid:3}
+];
+
+var EDGES=[
+  ["Tarlac City","Santa Rosa",1,"DJF",0.92],["Tarlac City","San Carlos",1,"DJF",0.91],
+  ["Tarlac City","Antipolo",1,"DJF",0.88],["Tarlac City","San Jose del Monte",1,"DJF",0.85],
+  ["Urdaneta","Antipolo",1,"DJF",0.87],["Urdaneta","Santa Rosa",1,"DJF",0.82],
+  ["Urdaneta","San Carlos",2,"DJF",0.79],["Malolos","Antipolo",1,"DJF",0.84],
+  ["Malolos","Santa Rosa",1,"DJF",0.80],["Malolos","San Carlos",1,"DJF",0.78],
+  ["Malabon","Antipolo",2,"DJF",0.72],["San Jose del Monte","Antipolo",1,"DJF",0.83],
+  ["Olongapo","San Carlos",1,"DJF",0.81],["Olongapo","Santa Rosa",2,"DJF",0.77],
+  ["Olongapo","Antipolo",2,"DJF",0.74],["Cauayan","Baguio",2,"DJF",0.70],
+  ["Cauayan","San Fernando",2,"DJF",0.68],["Cauayan","San Jose del Monte",3,"DJF",0.65],
+  ["Tuguegarao","Quezon City",3,"DJF",0.61],["Tuguegarao","Olongapo",3,"DJF",0.60],
+  ["Ilagan","Santiago",1,"DJF",0.75],["Ilagan","Cauayan",1,"DJF",0.80],
+  ["Laoag","Vigan",1,"DJF",0.88],["Vigan","San Fernando",1,"DJF",0.85],
+  ["San Fernando","Baguio",1,"DJF",0.82],["Baguio","Tarlac City",2,"DJF",0.76],
+  ["San Juan","Santiago",1,"DJF",0.79],["Dagupan","San Carlos",1,"DJF",0.73],
+  ["Dagupan","Urdaneta",1,"DJF",0.72],
+  ["Manila","Pasig",1,"JJA",0.88],["Manila","Taguig",1,"JJA",0.86],
+  ["Manila","Quezon City",1,"JJA",0.90],["Navotas","Manila",1,"JJA",0.84],
+  ["Valenzuela","Navotas",1,"JJA",0.82],["Meycauayan","Valenzuela",1,"JJA",0.80],
+  ["Malabon","Navotas",1,"JJA",0.83],["Quezon City","Antipolo",1,"JJA",0.85],
+  ["Pasig","Antipolo",1,"JJA",0.84],["Taguig","Antipolo",2,"JJA",0.78],
+  ["Cavite City","Manila",1,"JJA",0.76],["Bacoor","Manila",1,"JJA",0.77],
+  ["Imus","Bacoor",1,"JJA",0.75],
+  ["Santa Rosa","Antipolo",1,"MAM",0.80],["Calamba","Santa Rosa",1,"MAM",0.78],
+  ["Cabuyao","Calamba",1,"MAM",0.76],["Binan","Cabuyao",1,"MAM",0.74],
+  ["San Pablo","Antipolo",1,"MAM",0.73],["Lucena","San Pablo",2,"MAM",0.65],
+  ["Batangas City","Calamba",2,"MAM",0.68],["General Trias","Dasmarinas",1,"MAM",0.80],
+  ["Dasmarinas","Bacoor",1,"MAM",0.79],
+  ["Antipolo","San Jose del Monte",1,"SON",0.82],["San Jose del Monte","Malolos",1,"SON",0.78],
+  ["Malolos","Meycauayan",1,"SON",0.80],["Santa Rosa","Binan",1,"SON",0.76],
+  ["San Carlos","Dagupan",2,"SON",0.70],["Baguio","San Fernando",1,"SON",0.79],
+  ["San Fernando","Laoag",2,"SON",0.72],["Santiago","Ilagan",1,"SON",0.77],
+  ["Naga","Lucena",3,"SON",0.60],["Tabaco","Naga",2,"SON",0.65]
+];
+
+// ── PROJECTION ────────────────────────────────────────────────────────────────
+var MW=700,MH=680,PAD=44;
+var LATMN=13.1,LATMX=18.7,LONMN=119.7,LONMX=124.1;
+function proj(lat,lon){
+  return{
+    x:PAD+((lon-LONMN)/(LONMX-LONMN))*(MW-PAD*2),
+    y:PAD+((LATMX-lat)/(LATMX-LATMN))*(MH-PAD*2)
+  };
+}
+
+// Luzon outline
+var OUTLINE=[[18.5,120.8],[18.2,120.55],[17.9,120.35],[17.6,120.25],[17.3,120.15],
+  [17.0,120.05],[16.7,119.95],[16.4,119.88],[16.1,119.9],[15.8,119.95],[15.5,119.88],
+  [15.2,119.95],[14.9,120.05],[14.6,120.1],[14.3,120.2],[14.0,120.45],[13.7,120.85],
+  [13.4,121.3],[13.2,121.9],[13.15,122.6],[13.4,123.1],[13.7,123.6],[14.0,124.05],
+  [14.35,124.0],[14.65,123.75],[14.9,123.1],[15.1,122.4],[15.4,121.85],[15.65,121.75],
+  [15.9,122.05],[16.1,122.45],[16.4,122.85],[16.65,122.45],[16.95,121.95],
+  [17.25,121.85],[17.55,122.15],[17.85,122.45],[18.1,122.15],[18.4,121.75],
+  [18.55,121.1],[18.5,120.8]].map(function(p){return proj(p[0],p[1]);});
+
+// PM2.5 seasonal profiles
+function genPM(seed,base){
+  function r(s){var x=Math.sin(s)*43758.5453;return x-Math.floor(x);}
+  return[22,20,16,14,12,10,9,10,12,16,24,25].map(function(v,i){
+    return Math.max(2,v*(base/16)+(r(seed+i)*6-3));
+  });
+}
+var PM25={};
+CITIES.forEach(function(c,i){
+  PM25[c.id]=genPM(i*137,c.aid===2?20:c.aid===1?17:c.aid===4?14:12);
+});
+var CPOS={};
+CITIES.forEach(function(c){CPOS[c.id]=proj(c.lat,c.lon);});
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+var SEL=null,SEASON="ALL",MONTH=11,PLAYING=true;
+var particles=[],animId=null,monthId=null,tickN=0;
+
+// ── SVG SETUP ─────────────────────────────────────────────────────────────────
+var NS="http://www.w3.org/2000/svg";
+function el(tag,attrs,parent){
+  var e=document.createElementNS(NS,tag);
+  if(attrs)Object.keys(attrs).forEach(function(k){e.setAttribute(k,attrs[k]);});
+  if(parent)parent.appendChild(e);
+  return e;
+}
+function sa(e,attrs){Object.keys(attrs).forEach(function(k){e.setAttribute(k,attrs[k]);});}
+
+var svg=document.getElementById("mapsvg");
+var defs=el("defs",{},svg);
+
+// Glow filter
+var flt=el("filter",{id:"glow"},defs);
+el("feGaussianBlur",{stdDeviation:"2.5",result:"b"},flt);
+var fm=el("feMerge",{},flt);
+el("feMergeNode",{in:"b"},fm);
+el("feMergeNode",{in:"SourceGraphic"},fm);
+
+// Soft glow filter
+var flt2=el("filter",{id:"sglow"},defs);
+el("feGaussianBlur",{stdDeviation:"5",result:"b"},flt2);
+var fm2=el("feMerge",{},flt2);
+el("feMergeNode",{in:"b"},fm2);
+el("feMergeNode",{in:"SourceGraphic"},fm2);
+
+// Arrow markers
+Object.keys(SC).forEach(function(s){
+  var mk=el("marker",{id:"mk"+s,markerWidth:"6",markerHeight:"6",
+    refX:"5",refY:"3",orient:"auto"},defs);
+  el("path",{d:"M0,0 L0,6 L6,3 Z",fill:SC[s],opacity:"0.85"},mk);
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// LUZON MAP — accurate coastline + province fills + clean legend
+// ════════════════════════════════════════════════════════════════════════
+
+// Detailed Luzon main island coastline (clockwise, ~100 pts)
+var LUZON=[
+  // Northwest coast (Ilocos Norte → Ilocos Sur → La Union)
+  [18.65,120.83],[18.5,120.78],[18.35,120.68],[18.18,120.52],[18.0,120.42],
+  [17.85,120.37],[17.65,120.27],[17.45,120.17],[17.25,120.1],[17.05,120.05],
+  [16.88,119.97],[16.7,119.93],[16.55,119.9],[16.38,119.88],[16.2,119.92],
+  [16.05,119.97],[15.88,119.97],[15.68,119.9],
+  // Zambales coast going south
+  [15.5,119.87],[15.3,119.93],[15.1,119.98],[14.92,120.05],[14.75,120.25],
+  [14.62,120.32],[14.5,120.45],[14.38,120.52],
+  // Bataan peninsula
+  [14.55,120.42],[14.48,120.52],[14.42,120.62],[14.45,120.75],[14.52,120.82],
+  [14.62,120.88],
+  // Manila Bay / Cavite
+  [14.48,120.9],[14.32,120.87],[14.18,120.77],[14.05,120.88],
+  // Batangas coast going east
+  [13.88,120.72],[13.72,120.82],[13.62,120.92],[13.55,121.08],[13.52,121.25],
+  [13.58,121.38],[13.68,121.45],[13.75,121.2],
+  // Quezon coast east side going north
+  [13.82,121.5],[13.9,121.72],[13.95,121.9],[14.0,122.05],[14.08,122.22],
+  [14.18,122.42],[14.28,122.6],[14.38,122.72],[14.48,122.85],
+  // Camarines Norte / Bicol Peninsula
+  [14.35,122.95],[14.22,123.08],[14.08,123.15],[13.95,123.25],[13.82,123.35],
+  [13.72,123.48],[13.62,123.6],[13.52,123.7],[13.42,123.75],
+  // South tip Sorsogon
+  [13.3,123.6],[13.15,123.48],[13.02,123.58],[12.98,123.72],[13.05,123.92],
+  [13.18,124.02],[13.32,123.98],[13.45,123.85],[13.55,123.72],
+  // Back up east coast to Quezon / Aurora
+  [13.68,123.55],[13.78,123.35],[13.9,123.12],[14.02,122.92],[14.12,122.72],
+  [14.28,122.55],[14.45,122.35],[14.6,122.18],[14.75,122.05],[14.9,121.92],
+  [15.05,121.72],[15.2,121.52],[15.35,121.35],[15.52,121.28],[15.65,121.18],
+  // Aurora coast north
+  [15.7,121.28],[15.78,121.48],[15.85,121.72],[15.9,121.95],[15.95,122.12],
+  // Cagayan Valley east coast
+  [16.05,122.35],[16.18,122.55],[16.32,122.72],[16.48,122.82],[16.62,122.72],
+  [16.78,122.52],[16.92,122.22],[17.05,121.98],[17.18,121.85],
+  // Cagayan north coast
+  [17.35,121.92],[17.52,122.1],[17.68,122.35],[17.85,122.52],[17.98,122.48],
+  [18.08,122.25],[18.18,122.08],[18.28,121.88],[18.38,121.72],[18.48,121.42],
+  [18.55,121.18],[18.6,121.0],[18.65,120.83]
+];
+
+// Province boundary data (key provinces for visual clarity)
+var PROVS=[
+  // Ilocos region (blue tint)
+  {pts:[[18.65,120.83],[18.18,120.52],[17.65,120.27],[17.25,120.1],[16.88,119.97],[16.55,119.9],[16.38,119.88],[16.2,119.92],[16.38,120.55],[16.6,120.7],[16.88,120.65],[17.05,120.55],[17.35,120.62],[17.65,120.55],[17.9,120.55],[18.1,120.62],[18.35,120.78],[18.65,120.83]],fill:"#dce8fa",stroke:"#b0c8e8"},
+  // CAR — Cordillera (amber)
+  {pts:[[16.38,120.55],[16.6,120.7],[16.88,120.65],[17.05,120.55],[17.35,120.62],[17.65,120.55],[17.9,120.55],[17.9,121.35],[17.65,121.5],[17.45,121.42],[17.25,121.25],[17.05,121.05],[16.85,121.0],[16.65,120.95],[16.5,120.9],[16.38,120.55]],fill:"#fde8c0",stroke:"#e8c878"},
+  // Cagayan Valley (green)
+  {pts:[[17.9,120.55],[18.1,120.62],[18.35,120.78],[18.65,120.83],[18.6,121.0],[18.55,121.18],[18.48,121.42],[18.38,121.72],[18.28,121.88],[18.18,122.08],[18.08,122.25],[17.98,122.48],[17.85,122.52],[17.68,122.35],[17.52,122.1],[17.35,121.92],[17.18,121.85],[17.05,121.98],[16.92,122.22],[16.78,122.52],[16.62,122.72],[16.48,122.82],[16.32,122.72],[16.18,122.55],[16.05,122.35],[15.95,122.12],[15.85,121.72],[15.7,121.28],[15.65,121.18],[15.52,121.28],[15.35,121.35],[15.52,121.0],[15.65,120.95],[16.2,120.92],[16.38,120.55],[16.5,120.9],[16.65,120.95],[16.85,121.0],[17.05,121.05],[17.25,121.25],[17.45,121.42],[17.65,121.5],[17.9,121.35],[17.9,120.55]],fill:"#d4edda",stroke:"#9dcca8"},
+  // Central Luzon (light green)
+  {pts:[[15.88,119.97],[15.68,119.9],[15.5,119.87],[15.3,119.93],[15.1,119.98],[14.92,120.05],[14.75,120.25],[14.62,120.32],[14.5,120.45],[14.38,120.52],[14.55,120.42],[14.62,120.88],[14.78,121.02],[14.92,121.1],[15.12,121.18],[15.3,121.22],[15.52,121.0],[15.35,121.35],[15.52,121.28],[15.65,121.18],[15.65,120.95],[16.2,120.92],[16.38,120.55],[16.2,119.92],[16.05,119.97],[15.88,119.97]],fill:"#d8f0d8",stroke:"#9dc89d"},
+  // NCR Metro Manila (lavender)
+  {pts:[[14.78,121.02],[14.65,121.0],[14.48,120.9],[14.45,121.05],[14.52,121.18],[14.65,121.22],[14.78,121.18],[14.78,121.02]],fill:"#eed8f5",stroke:"#c898e0"},
+  // CALABARZON + Quezon (purple tint)
+  {pts:[[14.78,121.02],[14.78,121.18],[14.65,121.22],[14.52,121.18],[14.45,121.05],[14.48,120.9],[14.32,120.87],[14.18,120.77],[14.05,120.88],[13.88,120.72],[13.72,120.82],[13.62,120.92],[13.55,121.08],[13.52,121.25],[13.58,121.38],[13.68,121.45],[13.82,121.5],[13.9,121.72],[14.0,122.05],[14.18,122.42],[14.38,122.72],[14.6,122.18],[14.75,122.05],[15.05,121.72],[15.2,121.52],[15.35,121.35],[15.3,121.22],[15.12,121.18],[14.92,121.1],[14.78,121.02]],fill:"#e8d8f5",stroke:"#c898e0"},
+  // Bicol (orange tint)
+  {pts:[[14.38,122.72],[14.48,122.85],[14.35,122.95],[14.22,123.08],[14.08,123.15],[13.95,123.25],[13.82,123.35],[13.72,123.48],[13.62,123.6],[13.52,123.7],[13.3,123.6],[13.15,123.48],[13.02,123.58],[12.98,123.72],[13.05,123.92],[13.18,124.02],[13.32,123.98],[13.45,123.85],[13.55,123.72],[13.68,123.55],[13.78,123.35],[13.9,123.12],[14.02,122.92],[14.12,122.72],[14.28,122.55],[14.18,122.42],[14.0,122.05],[13.9,121.72],[13.82,121.5],[13.68,121.45],[13.78,121.55],[14.0,121.68],[14.12,121.85],[14.28,122.1],[14.38,122.72]],fill:"#ffe0c8",stroke:"#e8b088"},
+];
+
+// Helper
+function polPath(pts,close){
+  return pts.map(function(p,i){var q=proj(p[0],p[1]);return(i?"L":"M")+q.x.toFixed(1)+","+q.y.toFixed(1);}).join("")+(close?"Z":"");
+}
+
+// ── DRAW ──────────────────────────────────────────────────────────────────
+// Sea
+el("rect",{x:0,y:0,width:MW,height:MH,fill:"#b8d9ee"},svg);
+// Sea name labels (subtle italic)
+[["SOUTH CHINA SEA",16.2,119.25],["PHILIPPINE SEA",15.8,123.85],["SIBUYAN SEA",12.85,122.3]].forEach(function(s){
+  var p=proj(s[1],s[2]);
+  var t=el("text",{x:p.x,y:p.y,"text-anchor":"middle","font-size":"8.5","font-style":"italic",
+    fill:"#4a7a9b",opacity:"0.75","letter-spacing":"0.12em","font-family":"Inter,sans-serif"},svg);
+  t.textContent=s[0];
+});
+// Province fills first (behind everything)
+PROVS.forEach(function(p){
+  el("path",{d:polPath(p.pts,true),fill:p.fill,stroke:p.stroke,"stroke-width":"0.8",opacity:"0.85"},svg);
+});
+// Main Luzon coastline on top of province fills
+el("path",{d:polPath(LUZON,true),fill:"none",stroke:"#5a8fa8","stroke-width":"1.8"},svg);
+// Coordinate grid (subtle)
+[14,15,16,17,18].forEach(function(lat){
+  var y=proj(lat,120).y;
+  el("line",{x1:PAD,x2:MW-PAD,y1:y,y2:y,stroke:"#90b8d0","stroke-width":"0.4","stroke-dasharray":"4,7"},svg);
+  var tx=el("text",{x:PAD-4,y:y+3,"font-size":"7","text-anchor":"end",fill:"#6090a8","font-family":"DM Mono,monospace"},svg);
+  tx.textContent=lat+"°N";
+});
+[120,121,122,123].forEach(function(lon){
+  var x=proj(14,lon).x;
+  el("line",{x1:x,x2:x,y1:PAD,y2:MH-PAD,stroke:"#90b8d0","stroke-width":"0.4","stroke-dasharray":"4,7"},svg);
+  var tx=el("text",{x:x,y:MH-PAD+13,"font-size":"7","text-anchor":"middle",fill:"#6090a8","font-family":"DM Mono,monospace"},svg);
+  tx.textContent=lon+"°E";
+});
+// (Region labels drawn inside the IIFE map block above)
+
+var edgeG=el("g",{},svg);
+var ptG=el("g",{},svg);
+var nodeG=el("g",{},svg);
+
+// ── NODES ─────────────────────────────────────────────────────────────────────
+var NEL={};
+CITIES.forEach(function(city){
+  var pos=CPOS[city.id],col=AC[city.aid];
+  var g=el("g",{cursor:"pointer"},nodeG);
+  var halo=el("circle",{cx:pos.x,cy:pos.y,r:14,fill:col,opacity:0,filter:"url(#sglow)"},g);
+  var dot=el("circle",{cx:pos.x,cy:pos.y,r:4.5,fill:col},g);
+  var lbl=el("text",{x:pos.x,y:pos.y-10,"text-anchor":"middle","font-size":"8.5",
+    "font-family":"'Courier New',monospace",fill:col,filter:"url(#glow)",opacity:0},g);
+  lbl.textContent=city.id;
+  NEL[city.id]={g:g,halo:halo,dot:dot,lbl:lbl};
+  g.addEventListener("click",function(ev){
+    ev.stopPropagation();
+    SEL=(SEL===city.id?null:city.id);
+    window.parent.postMessage({type:'cityClick',city:SEL},'*');
+    render();
+  });
+  g.addEventListener("mouseenter",function(){
+    sa(dot,{r:7,filter:"url(#glow)"});
+    sa(halo,{opacity:"0.15"});
+    sa(lbl,{opacity:"1"});
+  });
+  g.addEventListener("mouseleave",function(){
+    if(SEL!==city.id){
+      sa(dot,{r:4.5,filter:"none"});
+      sa(halo,{opacity:"0"});
+      sa(lbl,{opacity:"0"});
+    }
+  });
+});
+
+// Click background to deselect
+svg.addEventListener("click",function(){SEL=null;window.parent.postMessage({type:'cityClick',city:null},'*');render();});
+
+// ── LEGEND ────────────────────────────────────────────────────────────────────
+var leg=document.getElementById("legend");
+leg.innerHTML=
+  '<div style="font-size:8px;font-weight:700;color:#334155;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:5px;padding-bottom:4px;border-bottom:1px solid #e2e8f0;">Functional Airsheds</div>'
+  +Object.keys(AL).map(function(id){
+    return'<div style="display:flex;align-items:center;gap:6px;padding:1.5px 0;">'
+      +'<div style="width:8px;height:8px;border-radius:50%;background:'+AC[id]+';flex-shrink:0;"></div>'
+      +'<span style="color:#475569;font-size:7.5px;font-weight:500;">'+AL[id].replace(/ \(.*\)/,"")+'</span></div>';
+  }).join("")
+  +'<div style="border-top:1px solid #e2e8f0;margin-top:5px;padding-top:4px;">'
+  +'<div style="font-size:7px;font-weight:700;color:#64748b;letter-spacing:0.08em;margin-bottom:2px;">TRANSPORT LAG</div>'
+  +'<div style="font-size:7px;color:#64748b;line-height:1.8;">'
+  +'&#8212; 1 day &nbsp; &ndash;&ndash; 2 days &nbsp; &middot;&middot; 3 days</div>'
+  +'<div style="font-size:7px;font-weight:700;color:#64748b;letter-spacing:0.08em;margin:3px 0 2px;">PAGASA SEASON</div>'
+  +'<div style="display:flex;gap:5px;">'
+  +Object.keys(SC).map(function(s){
+    return'<span style="font-size:8px;font-weight:700;color:'+SC[s]+';">'+s+'</span>';
+  }).join("")
+  +'</div></div>';
+
+// ── SEASON + PLAY BUTTONS ─────────────────────────────────────────────────────
+var sbtns=document.getElementById("sbtns");
+["ALL","DJF","MAM","JJA","SON"].forEach(function(s){
+  var b=document.createElement("button");
+  b.className="sbtn"; b.textContent=s==="ALL"?"ALL":s; b.dataset.s=s;
+  b.addEventListener("click",function(){SEASON=s;render();});
+  sbtns.appendChild(b);
+});
+var playB=document.createElement("button");
+playB.style.cssText="padding:3px 10px;font-size:9px;background:#eff6ff;color:#2563eb;"
+  +"border:1px solid #bfdbfe;border-radius:4px;font-weight:600;";
+playB.addEventListener("click",function(){PLAYING=!PLAYING;render();startAnim();});
+sbtns.appendChild(playB);
+
+// ── MONTH BUTTONS ─────────────────────────────────────────────────────────────
+var mbtns=document.getElementById("mbtns");
+MN.slice(1).forEach(function(m,i){
+  var mo=i+1,b=document.createElement("button");
+  b.className="mbtn"; b.textContent=m; b.dataset.mo=mo;
+  b.addEventListener("click",function(){MONTH=mo;PLAYING=false;render();startAnim();});
+  mbtns.appendChild(b);
+});
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function getEdges(){
+  var ms=MS[MONTH];
+  return EDGES.filter(function(e){
+    return SEASON==="ALL"||e[3]===SEASON||e[3]===ms;
+  }).map(function(e){return{src:e[0],tgt:e[1],lag:e[2],season:e[3],w:e[4]};});
+}
+function bezPath(s,t){
+  var a=CPOS[s],b=CPOS[t];if(!a||!b)return"";
+  var mx=(a.x+b.x)/2-(b.y-a.y)*0.15,my=(a.y+b.y)/2+(b.x-a.x)*0.15;
+  return"M"+a.x+","+a.y+" Q"+mx+","+my+" "+b.x+","+b.y;
+}
+function bezPt(a,b,t){
+  var mx=(a.x+b.x)/2-(b.y-a.y)*0.15,my=(a.y+b.y)/2+(b.x-a.x)*0.15;
+  var q=1-t;
+  return{x:q*q*a.x+2*q*t*mx+t*t*b.x, y:q*q*a.y+2*q*t*my+t*t*b.y};
+}
+
+// ── PARTICLES ─────────────────────────────────────────────────────────────────
+function initPts(edges){
+  while(ptG.firstChild)ptG.removeChild(ptG.firstChild);
+  particles=[];
+  edges.slice(0,55).forEach(function(e){
+    var a=CPOS[e.src],b=CPOS[e.tgt];if(!a||!b)return;
+    var n=Math.ceil(e.w*3);
+    for(var i=0;i<n;i++){
+      var t=Math.random(),sp=0.003+Math.random()*0.002;
+      var pos=bezPt(a,b,t);
+      var c=el("circle",{cx:pos.x,cy:pos.y,r:"2.2",
+        fill:SC[e.season],opacity:"0.88",filter:"url(#glow)"},ptG);
+      particles.push({e:e,t:t,sp:sp,el:c});
+    }
+  });
+}
+
+// ── ANIMATION ─────────────────────────────────────────────────────────────────
+function anim(){
+  if(!PLAYING){animId=null;return;}
+  tickN++;
+  if(tickN%2===0){
+    particles.forEach(function(p){
+      p.t+=p.sp; if(p.t>1)p.t-=1;
+      var a=CPOS[p.e.src],b=CPOS[p.e.tgt];
+      if(!a||!b||!p.el)return;
+      var pos=bezPt(a,b,p.t);
+      p.el.setAttribute("cx",pos.x);
+      p.el.setAttribute("cy",pos.y);
+    });
+  }
+  animId=requestAnimationFrame(anim);
+}
+function startAnim(){
+  if(animId)cancelAnimationFrame(animId);
+  if(monthId)clearInterval(monthId);
+  if(PLAYING){
+    animId=requestAnimationFrame(anim);
+    monthId=setInterval(function(){MONTH=MONTH>=12?1:MONTH+1;render();},1800);
+  }
+}
+
+// ── RIGHT PANEL ───────────────────────────────────────────────────────────────
+function renderPanel(edges){
+  var panel=document.getElementById("panel");
+  var city=SEL?CITIES.find(function(c){return c.id===SEL;}):null;
+  var ms=MS[MONTH];
+
+  if(!city){
+    panel.innerHTML=
+      '<div style="padding-top:28px;line-height:2.1;">'
+      +'<div style="font-size:12px;color:#2563eb;margin-bottom:14px;letter-spacing:0.04em;font-weight:600;">&#9670; Click any city to explore</div>'
+      +["Animated particles show directed PM&#8322;.&#8325; transport",
+        "Arrowheads mark the causal direction",
+        "Edge colour = dominant PAGASA season",
+        "Dash pattern = transport lag (1&ndash;3 days)",
+        "Season buttons filter active corridors",
+        "Month bar cycles through seasonal activation",
+        "Click any connection row to jump to that city"
+      ].map(function(t){return'<div style="font-size:9px;color:#475569;margin-bottom:1px;">&rarr; '+t+'</div>';}).join("")
+      +'<div style="margin-top:18px;padding:8px 10px;background:#f8fafc;border:1px solid #e2e8f0;'
+      +'border-radius:3px;font-size:8px;color:#94a3b8;line-height:1.8;">'
+      +'Proxy-controlled Granger causality &middot; BH-FDR q&#8202;=&#8202;0.05<br>'
+      +'344-edge backbone &middot; Top-20% by Granger weight<br>'
+      +'7 functional airsheds &middot; CCM validated (n&#8202;=&#8202;30 pairs)</div></div>'
+      +statsBar(edges);
+    return;
+  }
+
+  var col=AC[city.aid];
+  var pm=PM25[city.id];
+  var out=edges.filter(function(e){return e.src===SEL;});
+  var inc=edges.filter(function(e){return e.tgt===SEL;});
+  var o=out.length,ic=inc.length;
+  var role=o>ic*1.5?["EMITTER","#E64B35"]:ic>o*1.5?["RECEPTOR","#4A9EFF"]:["HUB","#34D399"];
+
+  // PM chart
+  var bars=pm.map(function(v,i){
+    var bw=14,bx=16+(i/12)*220+1,bh=(v/30)*58,by=65-bh,act=(i+1)===MONTH,s=MS[i+1];
+    return'<rect x="'+bx+'" y="'+by+'" width="'+bw+'" height="'+bh
+      +'" fill="'+SC[s]+'" opacity="'+(act?1:0.28)+'" rx="1"/>'
+      +(act?'<rect x="'+bx+'" y="'+(by-2)+'" width="'+bw+'" height="2" fill="#fff" opacity="0.9"/>':'');
+  }).join("");
+  var grid=[5,10,15,20,25].map(function(v){
+    var y=65-(v/30)*58;
+    return'<line x1="14" x2="236" y1="'+y+'" y2="'+y+'" stroke="#e2e8f0" stroke-width="0.5"/>'
+      +'<text x="12" y="'+(y+3)+'" font-size="6" fill="#94a3b8" text-anchor="end">'+v+'</text>';
+  }).join("");
+  var mlbls=MN.slice(1).map(function(m,i){
+    var act=(i+1)===MONTH;
+    return'<text x="'+(16+(i/12)*220+9)+'" y="74" font-size="6" fill="'+(act?"#CBD5E1":"#1E3050")
+      +'" text-anchor="middle">'+m+'</text>';
+  }).join("");
+
+  function eRow(e,dir){
+    var tid=dir==="out"?e.tgt:e.src;
+    var tc=CITIES.find(function(c){return c.id===tid;});
+    var tcol=tc?AC[tc.aid]:"#888";
+    var bc=SC[e.season]+(dir==="inc"?"44":"");
+    return'<div class="erow" onclick="jumpTo(\''+tid+'\')" '
+      +'style="border-left:2px solid '+bc+';">'
+      +'<div style="width:5px;height:5px;border-radius:50%;background:'+tcol+';flex-shrink:0;"></div>'
+      +'<span style="font-size:8px;color:'+(dir==="out"?"#7A9AB8":"#3A5570")+';flex:1;">'
+      +(dir==="out"?"&rarr; "+e.tgt:e.src+" &rarr;")+'</span>'
+      +'<span style="font-size:7px;color:#64748b;">L'+e.lag+'</span>'
+      +'<span style="font-size:7px;color:'+SC[e.season]+';">'+e.season+'</span>'
+      +'<div style="width:26px;height:2px;background:#1A2744;border-radius:1px;">'
+      +'<div style="width:'+(e.w*100)+'%;height:100%;background:'+SC[e.season]+(dir==="inc"?"88":"")+';border-radius:1px;"></div>'
+      +'</div></div>';
+  }
+
+  panel.innerHTML=
+    '<div style="border-bottom:1px solid #f1f5f9;padding-bottom:10px;">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">'
+        +'<div style="width:9px;height:9px;border-radius:50%;background:'+col+';"></div>'
+        +'<span style="font-size:14px;font-weight:bold;color:#0f172a;">'+city.id+'</span>'
+        +'<button onclick="jumpTo(null)" style="margin-left:auto;background:transparent;'
+        +'border:1px solid #1A2744;color:#64748b;border-radius:2px;padding:1px 6px;'
+        +'font-size:8px;font-family:\'Courier New\',monospace;">&#10005; close</button>'
+      +'</div>'
+      +'<div style="font-size:8px;color:#64748b;">'+AL[city.aid]+'</div>'
+      +'<div style="font-size:8px;color:#94a3b8;margin-top:2px;">'+city.lat.toFixed(3)+'&deg;N &middot; '+city.lon.toFixed(3)+'&deg;E</div>'
+    +'</div>'
+
+    +'<div>'
+      +'<div style="font-size:8px;color:#475569;letter-spacing:0.1em;margin-bottom:6px;">MONTHLY PM&#8322;.&#8325; PROFILE (&#956;g m&#8315;&#179;)</div>'
+      +'<svg width="100%" viewBox="0 0 240 78" style="overflow:visible;font-family:\'Courier New\',monospace;">'
+        +[[1,3,"DJF"],[3,6,"MAM"],[6,9,"JJA"],[9,12,"SON"]].map(function(x){
+          return'<rect x="'+(16+(x[0]-1)/12*220)+'" width="'+((x[1]-x[0])/12*220)+'" y="0" height="65" fill="'+SC[x[2]]+'" opacity="0.05"/>';
+        }).join("")
+        +grid+bars+mlbls
+        +'<text x="240" y="13" text-anchor="end" font-size="18" font-weight="bold" fill="'+SC[ms]+'" opacity="0.9">'+pm[MONTH-1].toFixed(1)+'</text>'
+        +'<text x="240" y="24" text-anchor="end" font-size="7" fill="#94a3b8">&#956;g m&#8315;&#179; &middot; '+MN[MONTH]+'</text>'
+      +'</svg>'
+    +'</div>'
+
+    +'<div style="display:flex;align-items:center;gap:10px;padding:7px 9px;'
+      +'background:#080E1A;border:1px solid '+role[1]+'22;border-radius:3px;">'
+      +'<span style="font-size:11px;font-weight:bold;color:'+role[1]+';">'+role[0]+'</span>'
+      +'<span style="font-size:8px;color:#475569;">'+o+' outgoing &middot; '+ic+' incoming</span>'
+    +'</div>'
+
+    +(out.length?'<div><div style="font-size:8px;color:#4A9EFF;letter-spacing:0.08em;margin-bottom:5px;">&#9654; OUTGOING ('+out.length+')</div>'
+      +out.slice(0,8).map(function(e){return eRow(e,"out");}).join("")+'</div>':"")
+
+    +(inc.length?'<div><div style="font-size:8px;color:#C084FC;letter-spacing:0.08em;margin-bottom:5px;">&#9664; INCOMING ('+inc.length+')</div>'
+      +inc.slice(0,8).map(function(e){return eRow(e,"inc");}).join("")+'</div>':"")
+
+    +statsBar(edges);
+}
+
+function statsBar(edges){
+  return'<div style="margin-top:auto;border-top:1px solid #f1f5f9;padding-top:9px;display:flex;gap:14px;flex-wrap:wrap;">'
+    +[["CITIES","40"],["EDGES","344"],["AIRSHEDS","7"],["SEASON",MS[MONTH]],["ACTIVE",edges.length]].map(function(x){
+      return'<div><div style="font-size:7px;color:#94a3b8;letter-spacing:0.1em;">'+x[0]+'</div>'
+        +'<div style="font-size:11px;color:#1e40af;font-weight:700;">'+x[1]+'</div></div>';
+    }).join("")+'</div>';
+}
+
+// ── JUMP TO CITY (from panel row clicks) ──────────────────────────────────────
+window.jumpTo=function(id){SEL=id;render();};
+
+// ── MAIN RENDER ───────────────────────────────────────────────────────────────
+function render(){
+  var edges=getEdges();
+  var ms=MS[MONTH];
+
+  // Season buttons
+  document.querySelectorAll(".sbtn").forEach(function(b){
+    var s=b.dataset.s,active=SEASON===s,col=SC[s]||"#4A9EFF";
+    b.style.background=active?col:"transparent";
+    b.style.color=active?"#fff":"#3A5070";
+    b.style.border="1px solid "+(active?col:"#1A2744");
+  });
+  playB.textContent=PLAYING?"&#9646;&#9646; PAUSE":"&#9654; PLAY";
+
+  // Month buttons
+  document.querySelectorAll(".mbtn").forEach(function(b){
+    var mo=+b.dataset.mo,act=mo===MONTH,s=MS[mo];
+    b.style.background=act?SC[s]:"#0A1020";
+    b.style.color=act?"#fff":"#2A4060";
+    b.style.fontWeight=act?"bold":"normal";
+  });
+  var ml=document.getElementById("mlabel");
+  ml.textContent=MN[MONTH]+" \u00b7 "+ms;
+  ml.style.color=SC[ms];
+  document.getElementById("ecount").textContent=edges.length+" edges active";
+
+  // Draw edges
+  while(edgeG.firstChild)edgeG.removeChild(edgeG.firstChild);
+  edges.forEach(function(e){
+    var hi=SEL&&(e.src===SEL||e.tgt===SEL),dim=SEL&&!hi;
+    el("path",{d:bezPath(e.src,e.tgt),fill:"none",stroke:SC[e.season],
+      "stroke-width":hi?"2.5":"0.75",
+      "stroke-opacity":dim?"0.03":hi?"1":"0.22",
+      "stroke-dasharray":e.lag===1?"none":e.lag===2?"6,3":"2,3",
+      "marker-end":"url(#mk"+e.season+")"},edgeG);
+  });
+
+  // Update nodes
+  CITIES.forEach(function(city){
+    var n=NEL[city.id],isSel=city.id===SEL;
+    var dim=SEL&&!isSel&&!edges.some(function(e){
+      return(e.src===SEL&&e.tgt===city.id)||(e.tgt===SEL&&e.src===city.id);
+    });
+    sa(n.dot,{r:isSel?"8":"4.5",opacity:dim?"0.15":"1",
+      filter:isSel?"url(#glow)":"none",
+      stroke:isSel?"#fff":"none","stroke-width":"1.5"});
+    sa(n.halo,{opacity:isSel?"0.18":"0"});
+    sa(n.lbl,{opacity:isSel?"1":"0"});
+  });
+
+  // Restart particles for new edge set
+  initPts(edges);
+
+  // Panel
+  renderPanel(edges);
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+render();
+startAnim();
+</script>
+</body>
+</html>
