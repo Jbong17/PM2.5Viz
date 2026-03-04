@@ -188,32 +188,41 @@ def airshed_radius(aid):
 def build_map(edges, sel=None):
     fig = go.Figure()
 
-    # Airshed territory circles
+    # Pre-compute connected cities for dimming
+    connected = set()
+    if sel:
+        connected.add(sel)
+        for e in edges:
+            if e["src"] == sel: connected.add(e["tgt"])
+            if e["tgt"] == sel: connected.add(e["src"])
+
+    # ── Airshed territory circles ─────────────────────────────────────────────
     for aid in AN:
-        clat,clon = airshed_centroid(aid)
+        clat, clon = airshed_centroid(aid)
         rad = airshed_radius(aid)
         col = AC[aid]
-        lats,lons = circle_pts(clat,clon,rad)
+        lats, lons = circle_pts(clat, clon, rad)
         fig.add_trace(go.Scattermapbox(
             lat=lats, lon=lons, mode="lines",
             fill="toself",
             fillcolor=rgba(col, 0.08),
-            line=dict(color=rgba(col, 0.5), width=1.0),
+            line=dict(color=col, width=1.0),
+            opacity=0.55,
             hoverinfo="none", showlegend=False,
         ))
 
-    # Transport edges — colored by SOURCE airshed
+    # ── Transport edges — color = source airshed ──────────────────────────────
     for e in edges:
-        s,t = CM.get(e["src"]), CM.get(e["tgt"])
+        s, t = CM.get(e["src"]), CM.get(e["tgt"])
         if not s or not t: continue
         src_col = AC[s["aid"]]
-        hi  = sel and (e["src"]==sel or e["tgt"]==sel)
-        dim = sel and not hi
-        lats,lons = bezier_pts(s["lat"],s["lon"],t["lat"],t["lon"])
+        hi  = bool(sel and (e["src"]==sel or e["tgt"]==sel))
+        dim = bool(sel and not hi)
+        lats, lons = bezier_pts(s["lat"], s["lon"], t["lat"], t["lon"])
         fig.add_trace(go.Scattermapbox(
             lat=lats, lon=lons, mode="lines",
-            line=dict(color=rgba(src_col, 0.9 if hi else 0.35 if not dim else 0.06),
-                      width=3.0 if hi else 1.5),
+            line=dict(color=src_col, width=3.2 if hi else 1.5),
+            opacity=0.92 if hi else (0.05 if dim else 0.32),
             hovertemplate=(
                 f"<b>{e['src']} → {e['tgt']}</b><br>"
                 f"Lag: {e['lag']}d · Season: {e['season']}<br>"
@@ -221,67 +230,91 @@ def build_map(edges, sel=None):
             ),
             showlegend=False,
         ))
-        # Direction dot
-        alat,alon = bezier_pt(s["lat"],s["lon"],t["lat"],t["lon"],0.82)
+        # Direction dot — separate trace, scalar opacity only
+        alat, alon = bezier_pt(s["lat"], s["lon"], t["lat"], t["lon"], 0.82)
         fig.add_trace(go.Scattermapbox(
             lat=[alat], lon=[alon], mode="markers",
-            marker=dict(size=7 if hi else 5,
-                        color=rgba(src_col, 0.85 if not dim else 0.08)),
+            marker=dict(size=7 if hi else 5, color=src_col),
+            opacity=0.88 if not dim else 0.06,
             hoverinfo="none", showlegend=False,
         ))
 
-    # City nodes by airshed (for legend)
+    # ── City nodes — split into dim / normal / selected traces ────────────────
+    # Each trace has ONE opacity value (scalar), so we group by (aid, dim_status)
     out_d = {c["id"]: sum(1 for e in edges if e["src"]==c["id"]) for c in CITIES}
     in_d  = {c["id"]: sum(1 for e in edges if e["tgt"]==c["id"]) for c in CITIES}
 
     for aid in sorted(AN):
         col = AC[aid]
         group = [c for c in CITIES if c["aid"]==aid]
-        lats,lons,sizes,texts = [],[],[],[]
-        for c in group:
-            deg = out_d[c["id"]] + in_d[c["id"]]
-            is_sel = c["id"]==sel
-            is_conn = sel and any(
-                (e["src"]==sel and e["tgt"]==c["id"]) or
-                (e["tgt"]==sel and e["src"]==c["id"]) for e in edges
-            )
-            lats.append(c["lat"]); lons.append(c["lon"])
-            sizes.append(18 if is_sel else 10+min(deg,7))
-            texts.append(c["id"])
-        fig.add_trace(go.Scattermapbox(
-            lat=lats, lon=lons, mode="markers+text",
-            marker=dict(size=sizes, color=rgba(col,1.0),
-                        line=dict(color="white", width=1.5)),
-            text=texts,
-            textposition="top center",
-            textfont=dict(size=9, color="#1e293b", family="DM Sans"),
-            hovertemplate="<b>%{text}</b><br>"+AN[aid]+"<extra></extra>",
-            name=AN[aid], showlegend=True, legendgroup=f"aid{aid}",
-        ))
 
-    # Selected city pulse ring
+        # Bucket: normal (full opacity) + dim (low opacity)
+        buckets = {"normal": [], "dim": []}
+        for c in group:
+            if sel and c["id"] not in connected:
+                buckets["dim"].append(c)
+            else:
+                buckets["normal"].append(c)
+
+        for bucket_key, bucket_cities in buckets.items():
+            if not bucket_cities: continue
+            is_dim = bucket_key == "dim"
+            lats, lons, sizes, texts = [], [], [], []
+            for c in bucket_cities:
+                deg = out_d[c["id"]] + in_d[c["id"]]
+                is_sel = c["id"] == sel
+                lats.append(c["lat"])
+                lons.append(c["lon"])
+                sizes.append(20 if is_sel else 10 + min(deg, 7))
+                texts.append(c["id"])
+
+            fig.add_trace(go.Scattermapbox(
+                lat=lats, lon=lons,
+                mode="markers+text",
+                marker=dict(
+                    size=sizes,
+                    color=col,
+                    line=dict(color="white", width=1.5),
+                ),
+                opacity=0.15 if is_dim else 1.0,
+                text=texts,
+                textposition="top center",
+                textfont=dict(size=9, color="#1e293b", family="DM Sans"),
+                hovertemplate="<b>%{text}</b><br>" + AN[aid] + "<extra></extra>",
+                # Only show in legend once per airshed (the normal bucket)
+                name=AN[aid],
+                showlegend=(not is_dim),
+                legendgroup=f"aid{aid}",
+            ))
+
+    # ── Selected city pulse ring ───────────────────────────────────────────────
     if sel and sel in CM:
-        sc = CM[sel]
-        col = AC[sc["aid"]]
+        sc_city = CM[sel]
+        col = AC[sc_city["aid"]]
         fig.add_trace(go.Scattermapbox(
-            lat=[sc["lat"]], lon=[sc["lon"]], mode="markers",
-            marker=dict(size=28, color=rgba(col,0.20)),
+            lat=[sc_city["lat"]], lon=[sc_city["lon"]], mode="markers",
+            marker=dict(size=30, color=col),
+            opacity=0.18,
             hoverinfo="none", showlegend=False,
         ))
 
     fig.update_layout(
-        mapbox=dict(style="carto-positron", center=dict(lat=15.8,lon=121.5), zoom=6.2),
-        margin=dict(l=0,r=0,t=0,b=0), height=640,
+        mapbox=dict(style="carto-positron", center=dict(lat=15.8, lon=121.5), zoom=6.2),
+        margin=dict(l=0, r=0, t=0, b=0), height=640,
         paper_bgcolor="white",
         legend=dict(
             bgcolor="rgba(255,255,255,0.93)", bordercolor="#e2e8f0", borderwidth=1,
-            font=dict(family="DM Sans",size=11,color="#334155"),
-            title=dict(text="<b>Functional Airsheds</b>",
-                       font=dict(family="Crimson Pro",size=13,color="#0f172a")),
+            font=dict(family="DM Sans", size=11, color="#334155"),
+            title=dict(
+                text="<b>Functional Airsheds</b>",
+                font=dict(family="Crimson Pro", size=13, color="#0f172a"),
+            ),
             x=0.01, y=0.99, xanchor="left", yanchor="top", itemsizing="constant",
         ),
-        hoverlabel=dict(bgcolor="white", bordercolor="#e2e8f0",
-                        font=dict(family="DM Sans",size=12,color="#1e293b")),
+        hoverlabel=dict(
+            bgcolor="white", bordercolor="#e2e8f0",
+            font=dict(family="DM Sans", size=12, color="#1e293b"),
+        ),
     )
     return fig
 
