@@ -330,10 +330,10 @@ if sel_city:
     fig=go.Figure()
     for s,rng in [("DJF",[1,2,12]),("MAM",[3,4,5]),("JJA",[6,7,8]),("SON",[9,10,11])]:
         for mo in rng:
-            fig.add_vrect(x0=mo-0.5,x1=mo+0.5,fillcolor=f"{SC[s]}14",opacity=1,layer="below",line_width=0)
+            fig.add_vrect(x0=mo-0.5,x1=mo+0.5,fillcolor=rgba(SC[s],0.08),opacity=1,layer="below",line_width=0)
     fig.add_trace(go.Bar(
         x=[MN[m] for m in range(1,13)], y=pm,
-        marker_color=[f"{SC[MS[m]]}{'ff' if m==month else '77'}" for m in range(1,13)],
+        marker_color=[rgba(SC[MS[m]], 1.0 if m==month else 0.45) for m in range(1,13)],
         hovertemplate="<b>%{x}</b><br>%{y:.1f} µg/m³<extra></extra>",
     ))
     fig.add_hline(y=15,line_dash="dot",line_color="#94a3b8",line_width=1.2,
