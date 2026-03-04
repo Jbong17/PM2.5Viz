@@ -274,7 +274,6 @@ def build_map(edges, sel=None):
                 marker=dict(
                     size=sizes,
                     color=col,
-                    line=dict(color="white", width=1.5),
                 ),
                 opacity=0.15 if is_dim else 1.0,
                 text=texts,
