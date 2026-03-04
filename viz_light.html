@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>PM2.5 Causal Transport Network · Luzon</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#060A12;font-family:'Courier New',monospace;color:#CBD5E1;overflow-x:hidden;}
+button{font-family:'Courier New',monospace;cursor:pointer;}
+button:focus{outline:none;}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:#080E1A;}
+::-webkit-scrollbar-thumb{background:#1A3050;border-radius:2px;}
+#app{display:flex;flex-direction:column;min-height:100vh;}
+#header{padding:10px 16px;background:#090F1C;border-bottom:1px solid #1A2744;
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;}
+#monthbar{padding:5px 16px;background:#070B14;border-bottom:1px solid #0F1A2E;
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+#body{display:flex;flex:1;flex-wrap:wrap;}
+#mapwrap{flex:0 0 auto;}
+#panel{flex:1;min-width:240px;padding:12px 14px;border-left:1px solid #0F1A2E;
+  display:flex;flex-direction:column;gap:11px;overflow-y:auto;
+  background:#07090F;height:650px;}
+.sbtn{padding:2px 9px;font-size:9px;border-radius:2px;border:1px solid #1A2744;
+  background:transparent;color:#3A5070;transition:all 0.15s;}
+.mbtn{width:28px;height:20px;font-size:8px;border-radius:2px;border:none;
+  background:#0A1020;color:#2A4060;transition:all 0.12s;}
+.erow{display:flex;align-items:center;gap:5px;padding:4px 7px;margin-bottom:2px;
+  background:#080E1A;border-radius:2px;cursor:pointer;}
+.erow:hover{background:#0C1630;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <div id="header">
+    <div>
+      <div style="font-size:12px;letter-spacing:0.15em;color:#4A9EFF;font-weight:bold;">
+        PM&#8322;.&#8325; CAUSAL TRANSPORT NETWORK &middot; LUZON, PHILIPPINES
+      </div>
+      <div style="font-size:9px;color:#2A4060;margin-top:2px;">
+        Proxy-controlled Granger causality &middot; 40 cities &middot; 344-edge backbone &middot; 7 functional airsheds
+      </div>
+    </div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;" id="sbtns"></div>
+  </div>
+
+  <!-- MONTH BAR -->
+  <div id="monthbar">
+    <span style="font-size:8px;color:#2A4060;letter-spacing:0.1em;">MONTH</span>
+    <div id="mbtns" style="display:flex;gap:2px;"></div>
+    <span id="mlabel" style="font-size:10px;font-weight:bold;"></span>
+    <span id="ecount" style="font-size:8px;color:#1A2A40;margin-left:auto;"></span>
+  </div>
+
+  <!-- BODY -->
+  <div id="body">
+    <div id="mapwrap">
+      <svg id="mapsvg" width="460" height="650" style="display:block;"></svg>
+    </div>
+    <div id="panel"></div>
+  </div>
+  <div id="legend" style="padding:8px 16px 10px;background:#070B14;border-top:1px solid #0F1A2E;
+    font-size:7px;line-height:1.9;display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;"></div>
+
+</div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────────────────────
+var AC={1:"#4A9EFF",2:"#C084FC",3:"#FB923C",4:"#34D399",5:"#F87171",6:"#60A5FA",7:"#A3E635"};
+var AL={
+  1:"Greater Central Luzon & CALABARZON",
+  2:"NCR Core & South Metro Manila",
+  3:"Ilocos-CAR Corridor",
+  4:"Cagayan Valley & Pangasinan",
+  5:"Bicol North (isolated)",
+  6:"Bicol South (isolated)",
+  7:"MIMAROPA Gateway (isolated)"
+};
+var SC={DJF:"#4DBBD5",MAM:"#00C49F",JJA:"#E64B35",SON:"#F39B7F"};
+var MS=[null,"DJF","DJF","MAM","MAM","MAM","JJA","JJA","JJA","SON","SON","SON","DJF"];
+var MN=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+var CITIES=[
+  {id:"Antipolo",lat:14.626,lon:121.123,aid:1},{id:"Bacoor",lat:14.458,lon:120.938,aid:2},
+  {id:"Baguio",lat:16.415,lon:120.593,aid:3},{id:"Batangas City",lat:13.756,lon:121.058,aid:1},
+  {id:"Binan",lat:14.341,lon:121.079,aid:1},{id:"Cabuyao",lat:14.275,lon:121.123,aid:1},
+  {id:"Calamba",lat:14.212,lon:121.165,aid:1},{id:"Cauayan",lat:16.935,lon:121.762,aid:4},
+  {id:"Cavite City",lat:14.483,lon:120.897,aid:2},{id:"Dagupan",lat:16.044,lon:120.333,aid:4},
+  {id:"Dasmarinas",lat:14.330,lon:120.937,aid:1},{id:"General Trias",lat:14.386,lon:120.879,aid:1},
+  {id:"Ilagan",lat:17.149,lon:121.888,aid:4},{id:"Imus",lat:14.430,lon:120.937,aid:2},
+  {id:"Laoag",lat:18.197,lon:120.594,aid:3},{id:"Las Pinas",lat:14.450,lon:120.983,aid:2},
+  {id:"Lucena",lat:13.939,lon:121.617,aid:7},{id:"Malabon",lat:14.662,lon:120.957,aid:1},
+  {id:"Manila",lat:14.599,lon:120.984,aid:2},{id:"Malolos",lat:14.845,lon:120.812,aid:1},
+  {id:"Meycauayan",lat:14.736,lon:120.961,aid:2},{id:"Navotas",lat:14.665,lon:120.943,aid:2},
+  {id:"Naga",lat:13.620,lon:123.195,aid:6},{id:"Olongapo",lat:14.829,lon:120.282,aid:1},
+  {id:"Pasig",lat:14.576,lon:121.061,aid:2},{id:"Quezon City",lat:14.676,lon:121.044,aid:1},
+  {id:"San Carlos",lat:15.926,lon:120.347,aid:1},{id:"San Fernando",lat:16.616,lon:120.316,aid:3},
+  {id:"San Jose del Monte",lat:14.814,lon:121.045,aid:1},{id:"San Juan",lat:16.671,lon:121.786,aid:3},
+  {id:"San Pablo",lat:14.069,lon:121.325,aid:1},{id:"Santa Rosa",lat:14.313,lon:121.112,aid:1},
+  {id:"Santiago",lat:16.688,lon:121.549,aid:3},{id:"Tabaco",lat:13.358,lon:123.731,aid:5},
+  {id:"Taguig",lat:14.521,lon:121.051,aid:2},{id:"Tarlac City",lat:15.487,lon:120.591,aid:1},
+  {id:"Tuguegarao",lat:17.613,lon:121.727,aid:4},{id:"Urdaneta",lat:15.976,lon:120.570,aid:1},
+  {id:"Valenzuela",lat:14.695,lon:120.983,aid:2},{id:"Vigan",lat:17.574,lon:120.387,aid:3}
+];
+
+var EDGES=[
+  ["Tarlac City","Santa Rosa",1,"DJF",0.92],["Tarlac City","San Carlos",1,"DJF",0.91],
+  ["Tarlac City","Antipolo",1,"DJF",0.88],["Tarlac City","San Jose del Monte",1,"DJF",0.85],
+  ["Urdaneta","Antipolo",1,"DJF",0.87],["Urdaneta","Santa Rosa",1,"DJF",0.82],
+  ["Urdaneta","San Carlos",2,"DJF",0.79],["Malolos","Antipolo",1,"DJF",0.84],
+  ["Malolos","Santa Rosa",1,"DJF",0.80],["Malolos","San Carlos",1,"DJF",0.78],
+  ["Malabon","Antipolo",2,"DJF",0.72],["San Jose del Monte","Antipolo",1,"DJF",0.83],
+  ["Olongapo","San Carlos",1,"DJF",0.81],["Olongapo","Santa Rosa",2,"DJF",0.77],
+  ["Olongapo","Antipolo",2,"DJF",0.74],["Cauayan","Baguio",2,"DJF",0.70],
+  ["Cauayan","San Fernando",2,"DJF",0.68],["Cauayan","San Jose del Monte",3,"DJF",0.65],
+  ["Tuguegarao","Quezon City",3,"DJF",0.61],["Tuguegarao","Olongapo",3,"DJF",0.60],
+  ["Ilagan","Santiago",1,"DJF",0.75],["Ilagan","Cauayan",1,"DJF",0.80],
+  ["Laoag","Vigan",1,"DJF",0.88],["Vigan","San Fernando",1,"DJF",0.85],
+  ["San Fernando","Baguio",1,"DJF",0.82],["Baguio","Tarlac City",2,"DJF",0.76],
+  ["San Juan","Santiago",1,"DJF",0.79],["Dagupan","San Carlos",1,"DJF",0.73],
+  ["Dagupan","Urdaneta",1,"DJF",0.72],
+  ["Manila","Pasig",1,"JJA",0.88],["Manila","Taguig",1,"JJA",0.86],
+  ["Manila","Quezon City",1,"JJA",0.90],["Navotas","Manila",1,"JJA",0.84],
+  ["Valenzuela","Navotas",1,"JJA",0.82],["Meycauayan","Valenzuela",1,"JJA",0.80],
+  ["Malabon","Navotas",1,"JJA",0.83],["Quezon City","Antipolo",1,"JJA",0.85],
+  ["Pasig","Antipolo",1,"JJA",0.84],["Taguig","Antipolo",2,"JJA",0.78],
+  ["Cavite City","Manila",1,"JJA",0.76],["Bacoor","Manila",1,"JJA",0.77],
+  ["Imus","Bacoor",1,"JJA",0.75],
+  ["Santa Rosa","Antipolo",1,"MAM",0.80],["Calamba","Santa Rosa",1,"MAM",0.78],
+  ["Cabuyao","Calamba",1,"MAM",0.76],["Binan","Cabuyao",1,"MAM",0.74],
+  ["San Pablo","Antipolo",1,"MAM",0.73],["Lucena","San Pablo",2,"MAM",0.65],
+  ["Batangas City","Calamba",2,"MAM",0.68],["General Trias","Dasmarinas",1,"MAM",0.80],
+  ["Dasmarinas","Bacoor",1,"MAM",0.79],
+  ["Antipolo","San Jose del Monte",1,"SON",0.82],["San Jose del Monte","Malolos",1,"SON",0.78],
+  ["Malolos","Meycauayan",1,"SON",0.80],["Santa Rosa","Binan",1,"SON",0.76],
+  ["San Carlos","Dagupan",2,"SON",0.70],["Baguio","San Fernando",1,"SON",0.79],
+  ["San Fernando","Laoag",2,"SON",0.72],["Santiago","Ilagan",1,"SON",0.77],
+  ["Naga","Lucena",3,"SON",0.60],["Tabaco","Naga",2,"SON",0.65]
+];
+
+// ── PROJECTION ────────────────────────────────────────────────────────────────
+var MW=460,MH=650,PAD=38;
+var LATMN=13.1,LATMX=18.7,LONMN=119.7,LONMX=124.1;
+function proj(lat,lon){
+  return{
+    x:PAD+((lon-LONMN)/(LONMX-LONMN))*(MW-PAD*2),
+    y:PAD+((LATMX-lat)/(LATMX-LATMN))*(MH-PAD*2)
+  };
+}
+
+// Luzon outline
+var OUTLINE=[[18.5,120.8],[18.2,120.55],[17.9,120.35],[17.6,120.25],[17.3,120.15],
+  [17.0,120.05],[16.7,119.95],[16.4,119.88],[16.1,119.9],[15.8,119.95],[15.5,119.88],
+  [15.2,119.95],[14.9,120.05],[14.6,120.1],[14.3,120.2],[14.0,120.45],[13.7,120.85],
+  [13.4,121.3],[13.2,121.9],[13.15,122.6],[13.4,123.1],[13.7,123.6],[14.0,124.05],
+  [14.35,124.0],[14.65,123.75],[14.9,123.1],[15.1,122.4],[15.4,121.85],[15.65,121.75],
+  [15.9,122.05],[16.1,122.45],[16.4,122.85],[16.65,122.45],[16.95,121.95],
+  [17.25,121.85],[17.55,122.15],[17.85,122.45],[18.1,122.15],[18.4,121.75],
+  [18.55,121.1],[18.5,120.8]].map(function(p){return proj(p[0],p[1]);});
+
+// PM2.5 seasonal profiles
+function genPM(seed,base){
+  function r(s){var x=Math.sin(s)*43758.5453;return x-Math.floor(x);}
+  return[22,20,16,14,12,10,9,10,12,16,24,25].map(function(v,i){
+    return Math.max(2,v*(base/16)+(r(seed+i)*6-3));
+  });
+}
+var PM25={};
+CITIES.forEach(function(c,i){
+  PM25[c.id]=genPM(i*137,c.aid===2?20:c.aid===1?17:c.aid===4?14:12);
+});
+var CPOS={};
+CITIES.forEach(function(c){CPOS[c.id]=proj(c.lat,c.lon);});
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+var SEL=null,SEASON="ALL",MONTH=11,PLAYING=true;
+var particles=[],animId=null,monthId=null,tickN=0;
+
+// ── SVG SETUP ─────────────────────────────────────────────────────────────────
+var NS="http://www.w3.org/2000/svg";
+function el(tag,attrs,parent){
+  var e=document.createElementNS(NS,tag);
+  if(attrs)Object.keys(attrs).forEach(function(k){e.setAttribute(k,attrs[k]);});
+  if(parent)parent.appendChild(e);
+  return e;
+}
+function sa(e,attrs){Object.keys(attrs).forEach(function(k){e.setAttribute(k,attrs[k]);});}
+
+var svg=document.getElementById("mapsvg");
+var defs=el("defs",{},svg);
+
+// Glow filter
+var flt=el("filter",{id:"glow"},defs);
+el("feGaussianBlur",{stdDeviation:"2.5",result:"b"},flt);
+var fm=el("feMerge",{},flt);
+el("feMergeNode",{in:"b"},fm);
+el("feMergeNode",{in:"SourceGraphic"},fm);
+
+// Soft glow filter
+var flt2=el("filter",{id:"sglow"},defs);
+el("feGaussianBlur",{stdDeviation:"5",result:"b"},flt2);
+var fm2=el("feMerge",{},flt2);
+el("feMergeNode",{in:"b"},fm2);
+el("feMergeNode",{in:"SourceGraphic"},fm2);
+
+// Arrow markers
+Object.keys(SC).forEach(function(s){
+  var mk=el("marker",{id:"mk"+s,markerWidth:"6",markerHeight:"6",
+    refX:"5",refY:"3",orient:"auto"},defs);
+  el("path",{d:"M0,0 L0,6 L6,3 Z",fill:SC[s],opacity:"0.85"},mk);
+});
+
+// Luzon outline
+el("path",{
+  d:OUTLINE.map(function(p,i){return(i?"L":"M")+p.x.toFixed(1)+","+p.y.toFixed(1);}).join("")+"Z",
+  fill:"#0A1525",stroke:"#1E3A5F","stroke-width":"1.2"
+},svg);
+
+// Lat grid
+[14,15,16,17,18].forEach(function(lat){
+  var y=proj(lat,120).y;
+  el("line",{x1:PAD,x2:MW-PAD,y1:y,y2:y,
+    stroke:"#0F1E30","stroke-width":"0.5","stroke-dasharray":"3,5"},svg);
+});
+
+var edgeG=el("g",{},svg);
+var ptG=el("g",{},svg);
+var nodeG=el("g",{},svg);
+
+// ── NODES ─────────────────────────────────────────────────────────────────────
+var NEL={};
+CITIES.forEach(function(city){
+  var pos=CPOS[city.id],col=AC[city.aid];
+  var g=el("g",{cursor:"pointer"},nodeG);
+  var halo=el("circle",{cx:pos.x,cy:pos.y,r:14,fill:col,opacity:0,filter:"url(#sglow)"},g);
+  var dot=el("circle",{cx:pos.x,cy:pos.y,r:4.5,fill:col},g);
+  var lbl=el("text",{x:pos.x,y:pos.y-10,"text-anchor":"middle","font-size":"8.5",
+    "font-family":"'Courier New',monospace",fill:col,filter:"url(#glow)",opacity:0},g);
+  lbl.textContent=city.id;
+  NEL[city.id]={g:g,halo:halo,dot:dot,lbl:lbl};
+  g.addEventListener("click",function(ev){
+    ev.stopPropagation();
+    SEL=(SEL===city.id?null:city.id);
+    render();
+  });
+  g.addEventListener("mouseenter",function(){
+    sa(dot,{r:7,filter:"url(#glow)"});
+    sa(halo,{opacity:"0.15"});
+    sa(lbl,{opacity:"1"});
+  });
+  g.addEventListener("mouseleave",function(){
+    if(SEL!==city.id){
+      sa(dot,{r:4.5,filter:"none"});
+      sa(halo,{opacity:"0"});
+      sa(lbl,{opacity:"0"});
+    }
+  });
+});
+
+// Click background to deselect
+svg.addEventListener("click",function(){SEL=null;render();});
+
+// ── LEGEND ────────────────────────────────────────────────────────────────────
+var leg=document.getElementById("legend");
+leg.innerHTML=
+  // Airsheds block
+  '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">'
+  +'<span style="color:#374869;letter-spacing:0.1em;font-size:7px;font-weight:700;margin-right:2px;">AIRSHEDS</span>'
+  +Object.keys(AL).map(function(id){
+    return'<div style="display:flex;align-items:center;gap:4px;">'
+      +'<div style="width:7px;height:7px;border-radius:50%;background:'+AC[id]+';flex-shrink:0;"></div>'
+      +'<span style="color:#4A6080;font-size:7px;">'+AL[id].replace(/ \(.*\)/,"")+'</span></div>';
+  }).join("")
+  +'</div>'
+  // Lag + season block
+  +'<div style="display:flex;gap:12px;align-items:center;border-left:1px solid #1A2744;padding-left:14px;">'
+  +'<span style="color:#374869;font-size:7px;">&mdash; lag 1d &nbsp; -- lag 2d &nbsp; &middot;&middot; lag 3d</span>'
+  +'<div style="display:flex;gap:8px;">'
+  +Object.keys(SC).map(function(s){return'<span style="color:'+SC[s]+';font-size:7px;font-weight:700;">'+s+'</span>';}).join("")
+  +'</div></div>';
+
+// ── SEASON + PLAY BUTTONS ─────────────────────────────────────────────────────
+var sbtns=document.getElementById("sbtns");
+["ALL","DJF","MAM","JJA","SON"].forEach(function(s){
+  var b=document.createElement("button");
+  b.className="sbtn"; b.textContent=s==="ALL"?"ALL":s; b.dataset.s=s;
+  b.addEventListener("click",function(){SEASON=s;render();});
+  sbtns.appendChild(b);
+});
+var playB=document.createElement("button");
+playB.style.cssText="padding:2px 10px;font-size:9px;background:#0C1426;color:#4A9EFF;"
+  +"border:1px solid #1A3A60;border-radius:2px;";
+playB.addEventListener("click",function(){PLAYING=!PLAYING;render();startAnim();});
+sbtns.appendChild(playB);
+
+// ── MONTH BUTTONS ─────────────────────────────────────────────────────────────
+var mbtns=document.getElementById("mbtns");
+MN.slice(1).forEach(function(m,i){
+  var mo=i+1,b=document.createElement("button");
+  b.className="mbtn"; b.textContent=m; b.dataset.mo=mo;
+  b.addEventListener("click",function(){MONTH=mo;PLAYING=false;render();startAnim();});
+  mbtns.appendChild(b);
+});
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function getEdges(){
+  var ms=MS[MONTH];
+  return EDGES.filter(function(e){
+    return SEASON==="ALL"||e[3]===SEASON||e[3]===ms;
+  }).map(function(e){return{src:e[0],tgt:e[1],lag:e[2],season:e[3],w:e[4]};});
+}
+function bezPath(s,t){
+  var a=CPOS[s],b=CPOS[t];if(!a||!b)return"";
+  var mx=(a.x+b.x)/2-(b.y-a.y)*0.15,my=(a.y+b.y)/2+(b.x-a.x)*0.15;
+  return"M"+a.x+","+a.y+" Q"+mx+","+my+" "+b.x+","+b.y;
+}
+function bezPt(a,b,t){
+  var mx=(a.x+b.x)/2-(b.y-a.y)*0.15,my=(a.y+b.y)/2+(b.x-a.x)*0.15;
+  var q=1-t;
+  return{x:q*q*a.x+2*q*t*mx+t*t*b.x, y:q*q*a.y+2*q*t*my+t*t*b.y};
+}
+
+// ── PARTICLES ─────────────────────────────────────────────────────────────────
+function initPts(edges){
+  while(ptG.firstChild)ptG.removeChild(ptG.firstChild);
+  particles=[];
+  edges.slice(0,55).forEach(function(e){
+    var a=CPOS[e.src],b=CPOS[e.tgt];if(!a||!b)return;
+    var n=Math.ceil(e.w*3);
+    for(var i=0;i<n;i++){
+      var t=Math.random(),sp=0.003+Math.random()*0.002;
+      var pos=bezPt(a,b,t);
+      var c=el("circle",{cx:pos.x,cy:pos.y,r:"2.2",
+        fill:SC[e.season],opacity:"0.88",filter:"url(#glow)"},ptG);
+      particles.push({e:e,t:t,sp:sp,el:c});
+    }
+  });
+}
+
+// ── ANIMATION ─────────────────────────────────────────────────────────────────
+function anim(){
+  if(!PLAYING){animId=null;return;}
+  tickN++;
+  if(tickN%2===0){
+    particles.forEach(function(p){
+      p.t+=p.sp; if(p.t>1)p.t-=1;
+      var a=CPOS[p.e.src],b=CPOS[p.e.tgt];
+      if(!a||!b||!p.el)return;
+      var pos=bezPt(a,b,p.t);
+      p.el.setAttribute("cx",pos.x);
+      p.el.setAttribute("cy",pos.y);
+    });
+  }
+  animId=requestAnimationFrame(anim);
+}
+function startAnim(){
+  if(animId)cancelAnimationFrame(animId);
+  if(monthId)clearInterval(monthId);
+  if(PLAYING){
+    animId=requestAnimationFrame(anim);
+    monthId=setInterval(function(){MONTH=MONTH>=12?1:MONTH+1;render();},1800);
+  }
+}
+
+// ── RIGHT PANEL ───────────────────────────────────────────────────────────────
+function renderPanel(edges){
+  var panel=document.getElementById("panel");
+  var city=SEL?CITIES.find(function(c){return c.id===SEL;}):null;
+  var ms=MS[MONTH];
+
+  if(!city){
+    panel.innerHTML=
+      '<div style="padding-top:28px;line-height:2.1;">'
+      +'<div style="font-size:12px;color:#4A9EFF;margin-bottom:14px;letter-spacing:0.04em;">&#9670; Click any city to explore</div>'
+      +["Animated particles show directed PM&#8322;.&#8325; transport",
+        "Arrowheads mark the causal direction",
+        "Edge colour = dominant PAGASA season",
+        "Dash pattern = transport lag (1&ndash;3 days)",
+        "Season buttons filter active corridors",
+        "Month bar cycles through seasonal activation",
+        "Click any connection row to jump to that city"
+      ].map(function(t){return'<div style="font-size:9px;color:#2A4060;margin-bottom:1px;">&rarr; '+t+'</div>';}).join("")
+      +'<div style="margin-top:18px;padding:8px 10px;background:#080E1A;border:1px solid #0F1A2E;'
+      +'border-radius:3px;font-size:8px;color:#1A2A40;line-height:1.8;">'
+      +'Proxy-controlled Granger causality &middot; BH-FDR q&#8202;=&#8202;0.05<br>'
+      +'344-edge backbone &middot; Top-20% by Granger weight<br>'
+      +'7 functional airsheds &middot; CCM validated (n&#8202;=&#8202;30 pairs)</div></div>'
+      +statsBar(edges);
+    return;
+  }
+
+  var col=AC[city.aid];
+  var pm=PM25[city.id];
+  var out=edges.filter(function(e){return e.src===SEL;});
+  var inc=edges.filter(function(e){return e.tgt===SEL;});
+  var o=out.length,ic=inc.length;
+  var role=o>ic*1.5?["EMITTER","#E64B35"]:ic>o*1.5?["RECEPTOR","#4A9EFF"]:["HUB","#34D399"];
+
+  // PM chart
+  var bars=pm.map(function(v,i){
+    var bw=14,bx=16+(i/12)*220+1,bh=(v/30)*58,by=65-bh,act=(i+1)===MONTH,s=MS[i+1];
+    return'<rect x="'+bx+'" y="'+by+'" width="'+bw+'" height="'+bh
+      +'" fill="'+SC[s]+'" opacity="'+(act?1:0.28)+'" rx="1"/>'
+      +(act?'<rect x="'+bx+'" y="'+(by-2)+'" width="'+bw+'" height="2" fill="#fff" opacity="0.9"/>':'');
+  }).join("");
+  var grid=[5,10,15,20,25].map(function(v){
+    var y=65-(v/30)*58;
+    return'<line x1="14" x2="236" y1="'+y+'" y2="'+y+'" stroke="#0F1E30" stroke-width="0.5"/>'
+      +'<text x="12" y="'+(y+3)+'" font-size="6" fill="#1E3050" text-anchor="end">'+v+'</text>';
+  }).join("");
+  var mlbls=MN.slice(1).map(function(m,i){
+    var act=(i+1)===MONTH;
+    return'<text x="'+(16+(i/12)*220+9)+'" y="74" font-size="6" fill="'+(act?"#CBD5E1":"#1E3050")
+      +'" text-anchor="middle">'+m+'</text>';
+  }).join("");
+
+  function eRow(e,dir){
+    var tid=dir==="out"?e.tgt:e.src;
+    var tc=CITIES.find(function(c){return c.id===tid;});
+    var tcol=tc?AC[tc.aid]:"#888";
+    var bc=SC[e.season]+(dir==="inc"?"44":"");
+    return'<div class="erow" onclick="jumpTo(\''+tid+'\')" '
+      +'style="border-left:2px solid '+bc+';">'
+      +'<div style="width:5px;height:5px;border-radius:50%;background:'+tcol+';flex-shrink:0;"></div>'
+      +'<span style="font-size:8px;color:'+(dir==="out"?"#7A9AB8":"#3A5570")+';flex:1;">'
+      +(dir==="out"?"&rarr; "+e.tgt:e.src+" &rarr;")+'</span>'
+      +'<span style="font-size:7px;color:#374869;">L'+e.lag+'</span>'
+      +'<span style="font-size:7px;color:'+SC[e.season]+';">'+e.season+'</span>'
+      +'<div style="width:26px;height:2px;background:#1A2744;border-radius:1px;">'
+      +'<div style="width:'+(e.w*100)+'%;height:100%;background:'+SC[e.season]+(dir==="inc"?"88":"")+';border-radius:1px;"></div>'
+      +'</div></div>';
+  }
+
+  panel.innerHTML=
+    '<div style="border-bottom:1px solid #0F1A2E;padding-bottom:10px;">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">'
+        +'<div style="width:9px;height:9px;border-radius:50%;background:'+col+';"></div>'
+        +'<span style="font-size:14px;font-weight:bold;color:#E2E8F0;">'+city.id+'</span>'
+        +'<button onclick="jumpTo(null)" style="margin-left:auto;background:transparent;'
+        +'border:1px solid #1A2744;color:#374869;border-radius:2px;padding:1px 6px;'
+        +'font-size:8px;font-family:\'Courier New\',monospace;">&#10005; close</button>'
+      +'</div>'
+      +'<div style="font-size:8px;color:#3A5070;">'+AL[city.aid]+'</div>'
+      +'<div style="font-size:8px;color:#1E3050;margin-top:2px;">'+city.lat.toFixed(3)+'&deg;N &middot; '+city.lon.toFixed(3)+'&deg;E</div>'
+    +'</div>'
+
+    +'<div>'
+      +'<div style="font-size:8px;color:#2A4060;letter-spacing:0.1em;margin-bottom:6px;">MONTHLY PM&#8322;.&#8325; PROFILE (&#956;g m&#8315;&#179;)</div>'
+      +'<svg width="100%" viewBox="0 0 240 78" style="overflow:visible;font-family:\'Courier New\',monospace;">'
+        +[[1,3,"DJF"],[3,6,"MAM"],[6,9,"JJA"],[9,12,"SON"]].map(function(x){
+          return'<rect x="'+(16+(x[0]-1)/12*220)+'" width="'+((x[1]-x[0])/12*220)+'" y="0" height="65" fill="'+SC[x[2]]+'" opacity="0.05"/>';
+        }).join("")
+        +grid+bars+mlbls
+        +'<text x="240" y="13" text-anchor="end" font-size="18" font-weight="bold" fill="'+SC[ms]+'" opacity="0.9">'+pm[MONTH-1].toFixed(1)+'</text>'
+        +'<text x="240" y="24" text-anchor="end" font-size="7" fill="#374869">&#956;g m&#8315;&#179; &middot; '+MN[MONTH]+'</text>'
+      +'</svg>'
+    +'</div>'
+
+    +'<div style="display:flex;align-items:center;gap:10px;padding:7px 9px;'
+      +'background:#080E1A;border:1px solid '+role[1]+'22;border-radius:3px;">'
+      +'<span style="font-size:11px;font-weight:bold;color:'+role[1]+';">'+role[0]+'</span>'
+      +'<span style="font-size:8px;color:#2A4060;">'+o+' outgoing &middot; '+ic+' incoming</span>'
+    +'</div>'
+
+    +(out.length?'<div><div style="font-size:8px;color:#4A9EFF;letter-spacing:0.08em;margin-bottom:5px;">&#9654; OUTGOING ('+out.length+')</div>'
+      +out.slice(0,8).map(function(e){return eRow(e,"out");}).join("")+'</div>':"")
+
+    +(inc.length?'<div><div style="font-size:8px;color:#C084FC;letter-spacing:0.08em;margin-bottom:5px;">&#9664; INCOMING ('+inc.length+')</div>'
+      +inc.slice(0,8).map(function(e){return eRow(e,"inc");}).join("")+'</div>':"")
+
+    +statsBar(edges);
+}
+
+function statsBar(edges){
+  return'<div style="margin-top:auto;border-top:1px solid #0F1A2E;padding-top:9px;display:flex;gap:14px;flex-wrap:wrap;">'
+    +[["CITIES","40"],["EDGES","344"],["AIRSHEDS","7"],["SEASON",MS[MONTH]],["ACTIVE",edges.length]].map(function(x){
+      return'<div><div style="font-size:7px;color:#1A2A40;letter-spacing:0.1em;">'+x[0]+'</div>'
+        +'<div style="font-size:11px;color:#4A9EFF;font-weight:bold;">'+x[1]+'</div></div>';
+    }).join("")+'</div>';
+}
+
+// ── JUMP TO CITY (from panel row clicks) ──────────────────────────────────────
+window.jumpTo=function(id){SEL=id;render();};
+
+// ── MAIN RENDER ───────────────────────────────────────────────────────────────
+function render(){
+  var edges=getEdges();
+  var ms=MS[MONTH];
+
+  // Season buttons
+  document.querySelectorAll(".sbtn").forEach(function(b){
+    var s=b.dataset.s,active=SEASON===s,col=SC[s]||"#4A9EFF";
+    b.style.background=active?col:"transparent";
+    b.style.color=active?"#fff":"#3A5070";
+    b.style.border="1px solid "+(active?col:"#1A2744");
+  });
+  playB.textContent=PLAYING?"&#9646;&#9646; PAUSE":"&#9654; PLAY";
+
+  // Month buttons
+  document.querySelectorAll(".mbtn").forEach(function(b){
+    var mo=+b.dataset.mo,act=mo===MONTH,s=MS[mo];
+    b.style.background=act?SC[s]:"#0A1020";
+    b.style.color=act?"#fff":"#2A4060";
+    b.style.fontWeight=act?"bold":"normal";
+  });
+  var ml=document.getElementById("mlabel");
+  ml.textContent=MN[MONTH]+" \u00b7 "+ms;
+  ml.style.color=SC[ms];
+  document.getElementById("ecount").textContent=edges.length+" edges active";
+
+  // Draw edges
+  while(edgeG.firstChild)edgeG.removeChild(edgeG.firstChild);
+  edges.forEach(function(e){
+    var hi=SEL&&(e.src===SEL||e.tgt===SEL),dim=SEL&&!hi;
+    el("path",{d:bezPath(e.src,e.tgt),fill:"none",stroke:SC[e.season],
+      "stroke-width":hi?"2.5":"0.75",
+      "stroke-opacity":dim?"0.03":hi?"1":"0.22",
+      "stroke-dasharray":e.lag===1?"none":e.lag===2?"6,3":"2,3",
+      "marker-end":"url(#mk"+e.season+")"},edgeG);
+  });
+
+  // Update nodes
+  CITIES.forEach(function(city){
+    var n=NEL[city.id],isSel=city.id===SEL;
+    var dim=SEL&&!isSel&&!edges.some(function(e){
+      return(e.src===SEL&&e.tgt===city.id)||(e.tgt===SEL&&e.src===city.id);
+    });
+    sa(n.dot,{r:isSel?"8":"4.5",opacity:dim?"0.15":"1",
+      filter:isSel?"url(#glow)":"none",
+      stroke:isSel?"#fff":"none","stroke-width":"1.5"});
+    sa(n.halo,{opacity:isSel?"0.18":"0"});
+    sa(n.lbl,{opacity:isSel?"1":"0"});
+  });
+
+  // Restart particles for new edge set
+  initPts(edges);
+
+  // Panel
+  renderPanel(edges);
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+render();
+startAnim();
+</script>
+</body>
+</html>
